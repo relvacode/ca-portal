@@ -40,11 +40,11 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}},enable={{is_tag}}
-            type=semver,pattern={{major}}.{{minor}},enable={{is_tag}}
-            type=semver,pattern={{major}},enable={{is_tag}}
-            type=raw,value=latest,enable={{is_tag}}
-            type=raw,value=unstable,enable={{is_default_branch}}
+            type=semver,pattern={{version}},event=tag
+            type=semver,pattern={{major}}.{{minor}},event=tag
+            type=semver,pattern={{major}},event=tag
+            type=raw,value=latest,event=tag
+            type=raw,value=unstable,event=branch,enable={{ is_default_branch }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
