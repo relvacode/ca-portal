@@ -272,7 +272,7 @@ func (s *Server) httpServeCallback(w http.ResponseWriter, req bunrouter.Request)
 		chain = append(chain, cert.Certificate)
 	}
 
-	pfxData, err := pkcs12.Modern.Encode(privateKey, leaf.Certificate, chain, "")
+	pfxData, err := pkcs12.Legacy.Encode(privateKey, leaf.Certificate, chain, pkcs12.DefaultPassword)
 	if err != nil {
 		return err
 	}
