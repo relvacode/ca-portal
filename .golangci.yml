@@ -10,16 +10,16 @@ linters:
     - goconst
     - exhaustruct
     - err113
+    - lll
   settings:
     varnamelen:
       ignore-decls:
         - w http.ResponseWriter
         - r *http.Request
-    lll:
-      line-length: 160
-      tab-width: 4
     funcorder:
       struct-method: false
+    tagalign:
+      sort: false
     depguard:
       rules:
         main:

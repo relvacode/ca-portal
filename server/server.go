@@ -56,16 +56,18 @@ type Server struct {
 	ca             *ca.Client
 	oauth2         *oauth2.Config
 	verifier       *oidc.IDTokenVerifier
+	httpClient     *http.Client
 	insecureCookie bool
 	redirectURL    *url.URL
 }
 
 // New returns a new Server using the supplied CA client, OAuth2 configuration, and ID token verifier.
-func New(ca *ca.Client, config *oauth2.Config, verifier *oidc.IDTokenVerifier, options ...Option) *Server {
+func New(ca *ca.Client, config *oauth2.Config, verifier *oidc.IDTokenVerifier, httpClient *http.Client, options ...Option) *Server {
 	server := &Server{
 		ca:             ca,
 		oauth2:         config,
 		verifier:       verifier,
+		httpClient:     httpClient,
 		insecureCookie: false,
 		redirectURL:    &url.URL{Path: "/callback"},
 	}
@@ -89,7 +91,7 @@ func getOIDCProvisioner(resp *api.ProvisionersResponse, name string) (*provision
 }
 
 // Discover returns a new Server by automatically discovering configuration from a named OIDC provisioner in the CA.
-func Discover(ctx context.Context, client *ca.Client, provisionerName string, options ...Option) (*Server, error) {
+func Discover(ctx context.Context, client *ca.Client, httpClient *http.Client, provisionerName string, options ...Option) (*Server, error) {
 	provisioners, err := client.ProvisionersWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provisioners: %w", err)
@@ -100,7 +102,9 @@ func Discover(ctx context.Context, client *ca.Client, provisionerName string, op
 		return nil, err
 	}
 
-	provider, err := oidc.NewProvider(ctx, strings.TrimSuffix(caProvisioner.ConfigurationEndpoint, ".well-known/openid-configuration"))
+	providerCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
+	provider, err := oidc.NewProvider(providerCtx, strings.TrimSuffix(caProvisioner.ConfigurationEndpoint, ".well-known/openid-configuration"))
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +119,7 @@ func Discover(ctx context.Context, client *ca.Client, provisionerName string, op
 		}
 	)
 
-	return New(client, config, verifier, options...), nil
+	return New(client, config, verifier, httpClient, options...), nil
 }
 
 // resolveRedirectURL returns the redirect URL to use for the OAuth flow made relative to the current request.
@@ -218,8 +222,10 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) (st
 		return "", nil, Error(http.StatusBadRequest, errors.New("invalid CSRF state"))
 	}
 
+	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, s.httpClient)
+
 	token, err := s.oauth2.Exchange(
-		r.Context(),
+		ctx,
 		r.FormValue("code"),
 		oauth2.VerifierOption(csrfVerifier),
 		oauth2.SetAuthURLParam("redirect_uri", s.resolveRedirectURL(r).String()),

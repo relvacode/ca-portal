@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -43,17 +45,46 @@ func (f *URLFlag) UnmarshalFlag(value string) error {
 	return nil
 }
 
+type OIDCOptions struct {
+	TLSInsecureSkipVerify bool   `long:"tls-insecure-skip-verify" env:"TLS_INSECURE_SKIP_VERIFY" description:"Skip TLS verification"`
+	TLSRootCertFile       string `long:"tls-root-cert-file"       env:"TLS_ROOT_CERT_FILE"       description:"Path to CA root certificate. If disabled, use the system CA certificates"`
+}
+
+func (o *OIDCOptions) TLSConfig() (*tls.Config, error) {
+	var certPool *x509.CertPool
+	if o.TLSRootCertFile != "" {
+		certPool = x509.NewCertPool()
+
+		certBytes, err := os.ReadFile(o.TLSRootCertFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA root certificate: %w", err)
+		}
+
+		if !certPool.AppendCertsFromPEM(certBytes) {
+			return nil, errors.New("failed to append CA root certificate")
+		}
+	}
+
+	return &tls.Config{
+		//nolint:gosec
+		InsecureSkipVerify: o.TLSInsecureSkipVerify,
+		RootCAs:            certPool,
+	}, nil
+}
+
 type ServerOptions struct {
-	RedirectURL    URLFlag `default:"/callback"                description:"Redirect URL"   env:"REDIRECT_URL"     long:"redirect-url" required:"true"`
-	InsecureCookie bool    `description:"Use insecure cookies" env:"INSECURE_COOKIE"        long:"insecure-cookie"`
-	ListenAddr     string  `default:":8080"                    description:"Listen address" env:"LISTEN_ADDR"      long:"listen-addr"`
+	RedirectURL    URLFlag `long:"redirect-url"    env:"REDIRECT_URL"    default:"/callback"                required:"true"              description:"Redirect URL"`
+	InsecureCookie bool    `long:"insecure-cookie" env:"INSECURE_COOKIE" description:"Use insecure cookies"`
+	ListenAddr     string  `long:"listen-addr"     env:"LISTEN_ADDR"     default:":8080"                    description:"Listen address"`
 }
 
 type Options struct {
-	CA     CAOptions     `env-namespace:"CA"     group:"CA Options"     namespace:"ca"`
-	Server ServerOptions `env-namespace:"SERVER" group:"Server Options" namespace:"server"`
+	CA     CAOptions     `group:"CA Options"     env-namespace:"CA"     namespace:"ca"`
+	Server ServerOptions `group:"Server Options" env-namespace:"SERVER" namespace:"server"`
+	OIDC   OIDCOptions   `group:"OIDC Options"   env-namespace:"OIDC"   namespace:"oidc"`
 }
 
+//nolint:funlen
 func Main() error {
 	var opts Options
 
@@ -73,6 +104,17 @@ func Main() error {
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, timeoutDiscover)
 	defer timeoutCancel()
 
+	tlsConfig, err := opts.OIDC.TLSConfig()
+	if err != nil {
+		return fmt.Errorf("failed to create TLS config for OIDC server: %w", err)
+	}
+
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	}
+
 	var serverOptions = []server.Option{
 		server.WithRedirectURL(&opts.Server.RedirectURL.URL),
 	}
@@ -81,7 +123,7 @@ func Main() error {
 		serverOptions = append(serverOptions, server.WithInsecureCookie)
 	}
 
-	caServer, err := server.Discover(timeoutCtx, caClient, opts.CA.Provisioner, serverOptions...)
+	caServer, err := server.Discover(timeoutCtx, caClient, httpClient, opts.CA.Provisioner, serverOptions...)
 	if err != nil {
 		return err
 	}
