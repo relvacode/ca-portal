@@ -1,0 +1,35 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - wsl
+    - cyclop
+    - gochecknoinits
+    - wrapcheck
+    - testpackage
+    - goconst
+    - exhaustruct
+    - err113
+  settings:
+    varnamelen:
+      ignore-decls:
+        - w http.ResponseWriter
+        - r *http.Request
+    lll:
+      line-length: 160
+      tab-width: 4
+    funcorder:
+      struct-method: false
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - github.com/relvacode/ca-portal
+            - github.com/jessevdk/go-flags
+            - github.com/smallstep/certificates
+            - github.com/coreos/go-oidc/v3/oidc
+            - github.com/google/uuid
+            - github.com/uptrace/bunrouter
+            - golang.org/x/oauth2
+            - software.sslmate.com/src/go-pkcs12
