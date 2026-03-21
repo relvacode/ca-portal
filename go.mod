@@ -8,7 +8,6 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/smallstep/certificates v0.30.1
 	github.com/uptrace/bunrouter v1.0.23
-	golang.org/x/crypto v0.49.0
 	golang.org/x/oauth2 v0.36.0
 	software.sslmate.com/src/go-pkcs12 v0.7.0
 )
@@ -97,6 +96,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	go.step.sm/crypto v0.77.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
