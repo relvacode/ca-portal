@@ -1,4 +1,4 @@
-// Package main is the binary application for the CA self service portal application.
+// Package main is the binary application for the CA self-service portal application.
 package main
 
 import (
@@ -24,12 +24,6 @@ const (
 	timeoutReadHeader     = 5 * time.Second
 )
 
-type CAOptions struct {
-	URL         string `description:"CA URL"                      env:"URL"         long:"url"         required:"true"`
-	RootCert    string `description:"Path to CA root certificate" env:"ROOT_CERT"   long:"root-cert"   required:"true"`
-	Provisioner string `description:"Provisioner name"            env:"PROVISIONER" long:"provisioner" required:"true"`
-}
-
 type URLFlag struct {
 	url.URL
 }
@@ -43,6 +37,12 @@ func (f *URLFlag) UnmarshalFlag(value string) error {
 	f.URL = *u
 
 	return nil
+}
+
+type CAOptions struct {
+	URL         URLFlag `description:"CA URL"                                 env:"URL"         long:"url"         required:"true"`
+	Fingerprint string  `description:"CA root certificate SHA256 fingerprint" env:"FINGERPRINT" long:"fingerprint"`
+	Provisioner string  `description:"Provisioner name"                       env:"PROVISIONER" long:"provisioner" required:"true"`
 }
 
 type OIDCOptions struct {
@@ -73,9 +73,9 @@ func (o *OIDCOptions) TLSConfig() (*tls.Config, error) {
 }
 
 type ServerOptions struct {
-	RedirectURL    URLFlag `long:"redirect-url"    env:"REDIRECT_URL"    default:"/callback"                required:"true"              description:"Redirect URL"`
+	RedirectURL    URLFlag `long:"redirect-url"    env:"REDIRECT_URL"    default:"/callback"                required:"true"                            description:"Redirect URL"`
 	InsecureCookie bool    `long:"insecure-cookie" env:"INSECURE_COOKIE" description:"Use insecure cookies"`
-	ListenAddr     string  `long:"listen-addr"     env:"LISTEN_ADDR"     default:":8080"                    description:"Listen address"`
+	ListenHTTP     string  `long:"listen-http"     env:"LISTEN_HTTP"     default:":8100"                    description:"Listen on this HTTPS address"`
 }
 
 type Options struct {
@@ -93,7 +93,7 @@ func Main() error {
 		return err
 	}
 
-	caClient, err := ca.NewClient(opts.CA.URL, ca.WithRootFile(opts.CA.RootCert))
+	caClient, err := ca.NewClient(opts.CA.URL.String(), ca.WithRootSHA256(opts.CA.Fingerprint))
 	if err != nil {
 		return err
 	}
@@ -104,14 +104,14 @@ func Main() error {
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, timeoutDiscover)
 	defer timeoutCancel()
 
-	tlsConfig, err := opts.OIDC.TLSConfig()
+	oidcTLSConfig, err := opts.OIDC.TLSConfig()
 	if err != nil {
 		return fmt.Errorf("failed to create TLS config for OIDC server: %w", err)
 	}
 
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
+			TLSClientConfig: oidcTLSConfig,
 		},
 	}
 
@@ -130,8 +130,8 @@ func Main() error {
 
 	httpServer := &http.Server{
 		ReadHeaderTimeout: timeoutReadHeader,
-		Addr:              opts.Server.ListenAddr,
 		Handler:           caServer.HTTPHandler(),
+		Addr:              opts.Server.ListenHTTP,
 	}
 
 	go func() {
@@ -156,5 +156,7 @@ func main() {
 	err := Main()
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
+
+		os.Exit(1)
 	}
 }
