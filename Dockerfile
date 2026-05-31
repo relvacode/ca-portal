@@ -15,7 +15,7 @@ RUN --mount=type=cache,target="/root/.cache/go-build" CGO_ENABLED=0 go build -ld
 
 FROM alpine:latest
 
-RUN apk --no-cache add libcap
+RUN apk --no-cache add libcap ca-certificates
 
 COPY --from=builder /app/ca-portal /bin/
 RUN setcap 'cap_net_bind_service=+ep' /bin/ca-portal
