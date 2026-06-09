@@ -11,6 +11,7 @@ linters:
     - exhaustruct
     - err113
     - lll
+    - gomodguard
   settings:
     varnamelen:
       ignore-decls:

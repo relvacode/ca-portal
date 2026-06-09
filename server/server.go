@@ -90,8 +90,17 @@ func getOIDCProvisioner(resp *api.ProvisionersResponse, name string) (*provision
 	return nil, fmt.Errorf("OIDC provisioner %s not found", name)
 }
 
+// DiscoverOptions sets an optional configuration for the Discover function.
+type DiscoverOptions struct {
+	HTTPClient *http.Client
+	// IssuerTrailingSlash indicates whether the issuer URL should have a trailing slash.
+	// As the OIDC issuer is only known by its configuration discovery endpoint,
+	// there's no way of telling if the OIDC provider will report its issuer with or without a trailing slash.
+	IssuerTrailingSlash bool
+}
+
 // Discover returns a new Server by automatically discovering configuration from a named OIDC provisioner in the CA.
-func Discover(ctx context.Context, client *ca.Client, httpClient *http.Client, provisionerName string, options ...Option) (*Server, error) {
+func Discover(ctx context.Context, client *ca.Client, provisionerName string, opts *DiscoverOptions, options ...Option) (*Server, error) {
 	provisioners, err := client.ProvisionersWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get provisioners: %w", err)
@@ -102,9 +111,23 @@ func Discover(ctx context.Context, client *ca.Client, httpClient *http.Client, p
 		return nil, err
 	}
 
-	providerCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+	if opts == nil {
+		opts = new(DiscoverOptions)
+	}
 
-	provider, err := oidc.NewProvider(providerCtx, strings.TrimSuffix(caProvisioner.ConfigurationEndpoint, ".well-known/openid-configuration"))
+	var httpClient = opts.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	var issuer = strings.TrimSuffix(caProvisioner.ConfigurationEndpoint, "/.well-known/openid-configuration")
+	if opts.IssuerTrailingSlash {
+		issuer += "/"
+	}
+
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
+	provider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +199,7 @@ func (s *Server) httpServeIndex(w http.ResponseWriter, req bunrouter.Request) er
 		oauth2.SetAuthURLParam("redirect_uri", s.resolveRedirectURL(req.Request).String()),
 	)
 
+	//nolint:gosec // Secure attribute is configured by application config
 	cookie := http.Cookie{
 		Name:     s.csrfCookieName(),
 		Value:    fmt.Sprintf("%s|%s", state, pkceVerifier),
@@ -208,6 +232,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) (st
 	}
 
 	// Delete CSRF cookie
+	//nolint:gosec // This is unsetting an existing cookie.
 	http.SetCookie(w, &http.Cookie{
 		Name:   s.csrfCookieName(),
 		MaxAge: -1,

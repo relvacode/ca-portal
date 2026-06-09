@@ -48,6 +48,7 @@ type CAOptions struct {
 type OIDCOptions struct {
 	TLSInsecureSkipVerify bool   `long:"tls-insecure-skip-verify" env:"TLS_INSECURE_SKIP_VERIFY" description:"Skip TLS verification"`
 	TLSRootCertFile       string `long:"tls-root-cert-file"       env:"TLS_ROOT_CERT_FILE"       description:"Path to CA root certificate. If disabled, use the system CA certificates"`
+	TrailingSlash         bool   `long:"trailing-slash"           env:"TRAILING_SLASH"           description:"Does the issuer reported by the OIDC discovery endpoint end in a trailing slash? This option must be set if so as it is not possible for the server to automatically detect this"`
 }
 
 func (o *OIDCOptions) TLSConfig() (*tls.Config, error) {
@@ -123,7 +124,12 @@ func Main() error {
 		serverOptions = append(serverOptions, server.WithInsecureCookie)
 	}
 
-	caServer, err := server.Discover(timeoutCtx, caClient, httpClient, opts.CA.Provisioner, serverOptions...)
+	var discoverOpts = &server.DiscoverOptions{
+		HTTPClient:          httpClient,
+		IssuerTrailingSlash: opts.OIDC.TrailingSlash,
+	}
+
+	caServer, err := server.Discover(timeoutCtx, caClient, opts.CA.Provisioner, discoverOpts, serverOptions...)
 	if err != nil {
 		return err
 	}
